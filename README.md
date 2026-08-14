@@ -31,9 +31,10 @@ docker compose up -d
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # fill in LiveKit and PayU credentials
+cp .env.example .env   # fill in LiveKit and PayU credentials, and set ADMIN_JWT_SECRET (openssl rand -hex 32)
 alembic upgrade head
 python scripts/import_menu.py seed/sample_menu.json   # optional: load sample menu
+python scripts/create_admin.py admin   # create the first /admin login (prompts for a password)
 uvicorn app.main:app --reload
 ```
 
@@ -59,6 +60,17 @@ npm run dev
 ```
 
 Frontend runs at `http://localhost:5173`.
+
+## Admin dashboard
+
+The menu admin at `/admin` (`frontend/src/admin/`) requires logging in with an `admin_users` account. There's no self-signup — accounts are created with a backend script:
+
+```bash
+cd backend && source .venv/bin/activate
+python scripts/create_admin.py <username>   # prompts for a password; safe to re-run to reset one
+```
+
+Login issues a JWT (signed with `ADMIN_JWT_SECRET`, valid for `ADMIN_JWT_EXPIRE_MINUTES`, default 12h) that all `/admin/*` API routes require. Each account has a `role` (currently always `owner`) reserved for future role-based permissions. In production, run `create_admin.py` once via your host's shell/console to bootstrap the first account — there's currently no in-app way to add more, so do the same for any additional admins until that's built.
 
 ## Notes
 

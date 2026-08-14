@@ -126,6 +126,29 @@ class UploadOut(BaseModel):
     url: str
 
 
+# ---- Admin: auth ----
+
+
+class AdminLoginIn(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+
+class AdminLoginOut(BaseModel):
+    token: str
+    expires_at: datetime
+    username: str
+    role: str
+
+
+class AdminUserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    username: str
+    role: str
+
+
 # ---- Conversation recording ----
 
 

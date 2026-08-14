@@ -457,3 +457,29 @@
   font: inherit;
   min-width: 0;
 }
+
+/* login */
+
+.admin-login-shell {
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+}
+
+.admin-login-form {
+  width: 100%;
+  max-width: 340px;
+  padding: 24px;
+}
+
+.admin-login-form h1 {
+  font-size: 18px;
+  margin: 0 0 4px;
+}
+
+.admin-session-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

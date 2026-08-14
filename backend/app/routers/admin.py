@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.auth import get_current_admin
 from app.config import Settings, get_settings
 from app.database import get_db
 from app.models import CustomizationGroup, CustomizationOption, MenuCategory, MenuItem
@@ -25,7 +26,7 @@ from app.schemas import (
 )
 from app.storage import UPLOAD_DIR
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_current_admin)])
 
 IMAGE_EXTENSION_BY_CONTENT_TYPE = {
     "image/png": ".png",

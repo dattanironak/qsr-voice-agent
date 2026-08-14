@@ -1,4 +1,5 @@
 import type { CustomizationGroup, CustomizationOption, MenuCategory, MenuItem } from "../types";
+import { clearToken, getToken, UnauthorizedError } from "./auth";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8000";
 
@@ -31,10 +32,18 @@ export interface OptionInput {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getToken();
   const res = await fetch(`${BACKEND_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...options,
   });
+  if (res.status === 401) {
+    clearToken();
+    throw new UnauthorizedError("Session expired");
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const detail = typeof body?.detail === "string" ? body.detail : null;
@@ -92,9 +101,18 @@ export const deleteOption = (id: string) =>
   request<void>(`/admin/options/${id}`, { method: "DELETE" });
 
 export async function uploadImage(file: File): Promise<{ url: string }> {
+  const token = getToken();
   const formData = new FormData();
   formData.append("file", file);
-  const res = await fetch(`${BACKEND_URL}/admin/uploads`, { method: "POST", body: formData });
+  const res = await fetch(`${BACKEND_URL}/admin/uploads`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: formData,
+  });
+  if (res.status === 401) {
+    clearToken();
+    throw new UnauthorizedError("Session expired");
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const detail = typeof body?.detail === "string" ? body.detail : null;

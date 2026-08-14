@@ -8,7 +8,10 @@ import {
   updateCategory,
   updateItem,
 } from "./api";
+import type { AdminSession } from "./auth";
+import { fetchMe, logout, UnauthorizedError } from "./auth";
 import { ItemModal } from "./ItemModal";
+import { LoginForm } from "./LoginForm";
 import "./admin.css";
 
 function errorMessage(err: unknown): string {
@@ -18,6 +21,7 @@ function errorMessage(err: unknown): string {
 type ItemModalState = { categoryId: string; item: MenuItem | null };
 
 export default function AdminApp() {
+  const [session, setSession] = useState<AdminSession | null | undefined>(undefined);
   const [categories, setCategories] = useState<MenuCategory[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -27,6 +31,12 @@ export default function AdminApp() {
   const [renameValue, setRenameValue] = useState("");
   const [itemModal, setItemModal] = useState<ItemModalState | null>(null);
 
+  useEffect(() => {
+    fetchMe()
+      .then(setSession)
+      .catch(() => setSession(null));
+  }, []);
+
   async function reload(): Promise<MenuCategory[]> {
     const cats = await fetchAdminCategories();
     setCategories(cats);
@@ -34,12 +44,19 @@ export default function AdminApp() {
   }
 
   useEffect(() => {
+    if (!session) return;
     reload()
       .then((cats) => {
         setSelectedCategoryId((prev) => prev ?? cats[0]?.id ?? null);
       })
-      .catch((err) => setLoadError(errorMessage(err)));
-  }, []);
+      .catch((err) => {
+        if (err instanceof UnauthorizedError) {
+          setSession(null);
+          return;
+        }
+        setLoadError(errorMessage(err));
+      });
+  }, [session]);
 
   async function runAction(fn: () => Promise<unknown>) {
     setActionError(null);
@@ -47,8 +64,31 @@ export default function AdminApp() {
       await fn();
       await reload();
     } catch (err) {
+      if (err instanceof UnauthorizedError) {
+        setSession(null);
+        return;
+      }
       setActionError(errorMessage(err));
     }
+  }
+
+  function handleLogout() {
+    logout();
+    setSession(null);
+    setCategories(null);
+    setSelectedCategoryId(null);
+  }
+
+  if (session === undefined) {
+    return (
+      <div className="admin-shell">
+        <p className="muted-text">Loading…</p>
+      </div>
+    );
+  }
+
+  if (session === null) {
+    return <LoginForm onLoggedIn={setSession} />;
   }
 
   function moveSortOrder<T extends { id: string; sort_order: number }>(
@@ -93,9 +133,15 @@ export default function AdminApp() {
     <div className="admin-shell">
       <header className="admin-header">
         <h1>Menu admin</h1>
-        <a className="admin-back-link" href="/">
-          ← Back to ordering
-        </a>
+        <div className="admin-session-bar">
+          <span className="muted-text">{session.username}</span>
+          <button type="button" className="admin-btn-secondary" onClick={handleLogout}>
+            Log out
+          </button>
+          <a className="admin-back-link" href="/">
+            ← Back to ordering
+          </a>
+        </div>
       </header>
 
       {actionError && <p className="error-text admin-action-error">{actionError}</p>}

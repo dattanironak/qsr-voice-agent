@@ -160,6 +160,16 @@ class Payment(Base):
     order: Mapped["Order"] = relationship(back_populates="payments")
 
 
+class AdminUser(Base):
+    __tablename__ = "admin_users"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    username: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False, server_default="owner")
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
+
+
 class ConversationSession(Base):
     __tablename__ = "conversation_sessions"
 

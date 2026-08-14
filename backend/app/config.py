@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     livekit_api_key: str | None = None
     livekit_api_secret: str | None = None
 
+    admin_jwt_secret: str
+    # Staff shift length — how long an admin login stays valid before requiring a re-login.
+    admin_jwt_expire_minutes: int = 12 * 60
+
     payu_merchant_key: str | None = None
     payu_merchant_salt: str | None = None
     # Hosted checkout POST endpoint. Defaults to PayU's test sandbox; swap to
