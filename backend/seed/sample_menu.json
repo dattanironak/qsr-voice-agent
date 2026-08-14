@@ -1,0 +1,115 @@
+{
+  "categories": [
+    {
+      "name": "Burgers",
+      "sort_order": 1,
+      "items": [
+        {
+          "name": "Classic Cheeseburger",
+          "description": "Beef patty, cheddar, lettuce, tomato",
+          "price": 199.00,
+          "image_url": "https://example.com/img/cheeseburger.jpg",
+          "customization_groups": [
+            {
+              "name": "Size",
+              "is_required": true,
+              "max_choices": 1,
+              "options": [
+                {"name": "Regular", "price_delta": 0},
+                {"name": "Large", "price_delta": 40.00}
+              ]
+            },
+            {
+              "name": "Add-ons",
+              "is_required": false,
+              "max_choices": 3,
+              "options": [
+                {"name": "Extra cheese", "price_delta": 20.00},
+                {"name": "Bacon", "price_delta": 30.00},
+                {"name": "Jalapenos", "price_delta": 10.00}
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Double Cheeseburger",
+          "description": "Two beef patties, double cheddar, lettuce, tomato",
+          "price": 279.00,
+          "image_url": "https://example.com/img/double-cheeseburger.jpg",
+          "customization_groups": [
+            {
+              "name": "Add-ons",
+              "is_required": false,
+              "max_choices": 3,
+              "options": [
+                {"name": "Extra cheese", "price_delta": 20.00},
+                {"name": "Bacon", "price_delta": 30.00}
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Veggie Burger",
+          "description": "Grilled veggie patty, lettuce, tomato, mayo",
+          "price": 169.00,
+          "image_url": "https://example.com/img/veggie-burger.jpg",
+          "customization_groups": []
+        }
+      ]
+    },
+    {
+      "name": "Wraps",
+      "sort_order": 2,
+      "items": [
+        {
+          "name": "Chicken Wrap",
+          "description": "Grilled chicken, lettuce, mayo, tortilla wrap",
+          "price": 189.00,
+          "image_url": "https://example.com/img/chicken-wrap.jpg",
+          "customization_groups": [
+            {
+              "name": "Spice level",
+              "is_required": true,
+              "max_choices": 1,
+              "options": [
+                {"name": "Mild", "price_delta": 0},
+                {"name": "Medium", "price_delta": 0},
+                {"name": "Hot", "price_delta": 0}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Beverages",
+      "sort_order": 3,
+      "items": [
+        {
+          "name": "Coca-Cola",
+          "description": "330ml can",
+          "price": 60.00,
+          "image_url": "https://example.com/img/coke.jpg",
+          "customization_groups": []
+        },
+        {
+          "name": "Cold Coffee",
+          "description": "Iced coffee blended with milk",
+          "price": 120.00,
+          "image_url": "https://example.com/img/cold-coffee.jpg",
+          "customization_groups": [
+            {
+              "name": "Size",
+              "is_required": true,
+              "max_choices": 1,
+              "options": [
+                {"name": "Regular", "price_delta": 0},
+                {"name": "Large", "price_delta": 30.00}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

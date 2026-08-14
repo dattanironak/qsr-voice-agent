@@ -1,0 +1,22 @@
+# env files (secrets) — .env.example files are tracked
+.env
+.env.local
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# node
+node_modules/
+dist/
+
+# runtime-generated content
+backend/app/static/uploads/*
+!backend/app/static/uploads/.gitkeep
+backend/app/static/receipts/*
+!backend/app/static/receipts/.gitkeep
+
+# misc
+.DS_Store
+.claude/scheduled_tasks.lock

@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: qsr
+      POSTGRES_PASSWORD: qsr
+      POSTGRES_DB: qsr_agent
+    ports:
+      - "5432:5432"
+    volumes:
+      - qsr_pg_data:/var/lib/postgresql/data
+
+volumes:
+  qsr_pg_data:
