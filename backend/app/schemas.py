@@ -44,6 +44,7 @@ class CategoryOut(BaseModel):
     id: uuid.UUID
     name: str
     sort_order: int
+    is_available: bool
     items: list[ItemOut]
 
 
@@ -68,11 +69,13 @@ class SessionTokenResponse(BaseModel):
 class CategoryCreate(BaseModel):
     name: str = Field(min_length=1)
     sort_order: int = 0
+    is_available: bool = True
 
 
 class CategoryUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     sort_order: int | None = None
+    is_available: bool | None = None
 
 
 class ItemCreate(BaseModel):

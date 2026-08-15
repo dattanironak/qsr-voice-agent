@@ -31,6 +31,7 @@ export interface MenuCategory {
   id: string;
   name: string;
   sort_order: number;
+  is_available: boolean;
   items: MenuItem[];
 }
 

@@ -30,6 +30,8 @@ def get_menu(db: Session = Depends(get_db)) -> MenuResponse:
 
     out: list[CategoryOut] = []
     for category in categories:
+        if not category.is_available:
+            continue
         items_out: list[ItemOut] = []
         for item in sorted(category.items, key=lambda i: i.sort_order):
             if not item.is_available:
@@ -68,6 +70,7 @@ def get_menu(db: Session = Depends(get_db)) -> MenuResponse:
                 id=category.id,
                 name=category.name,
                 sort_order=category.sort_order,
+                is_available=category.is_available,
                 items=items_out,
             )
         )

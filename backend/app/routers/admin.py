@@ -61,7 +61,7 @@ def list_categories(db: Session = Depends(get_db)):
 
 @router.post("/categories", response_model=CategoryOut, status_code=201)
 def create_category(body: CategoryCreate, db: Session = Depends(get_db)):
-    category = MenuCategory(name=body.name, sort_order=body.sort_order)
+    category = MenuCategory(name=body.name, sort_order=body.sort_order, is_available=body.is_available)
     db.add(category)
     try:
         db.commit()

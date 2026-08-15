@@ -6,6 +6,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8000";
 export interface CategoryInput {
   name: string;
   sort_order: number;
+  is_available: boolean;
 }
 
 export interface ItemInput {
