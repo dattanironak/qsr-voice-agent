@@ -63,14 +63,15 @@ Frontend runs at `http://localhost:5173`.
 
 ## Admin dashboard
 
-The menu admin at `/admin` (`frontend/src/admin/`) requires logging in with an `admin_users` account. There's no self-signup — accounts are created with a backend script:
+The admin dashboard at `/admin` (`frontend/src/admin/`) requires logging in with an `admin_users` account. There's no self-signup — accounts are created with a backend script:
 
 ```bash
 cd backend && source .venv/bin/activate
-python scripts/create_admin.py <username>   # prompts for a password; safe to re-run to reset one
+python scripts/create_admin.py <username> --role owner       # menu management + full order history
+python scripts/create_admin.py <username> --role treasurer   # today's orders only, no menu access
 ```
 
-Login issues a JWT (signed with `ADMIN_JWT_SECRET`, valid for `ADMIN_JWT_EXPIRE_MINUTES`, default 12h) that all `/admin/*` API routes require. Each account has a `role` (currently always `owner`) reserved for future role-based permissions. In production, run `create_admin.py` once via your host's shell/console to bootstrap the first account — there's currently no in-app way to add more, so do the same for any additional admins until that's built.
+Login issues a JWT (signed with `ADMIN_JWT_SECRET`, valid for `ADMIN_JWT_EXPIRE_MINUTES`, default 12h) that all `/admin/*` API routes require. Each account has a `role`, either `owner` or `treasurer`, enforced on the backend: `owner` can manage the menu (`/admin/categories`, `/admin/items`, ...) and view the full order history (`GET /admin/orders`); `treasurer` can only view `GET /admin/orders`, which is restricted server-side to orders created today. In production, run `create_admin.py` once via your host's shell/console to bootstrap the first account — there's currently no in-app way to add more, so do the same for any additional admins until that's built.
 
 ## Notes
 

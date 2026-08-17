@@ -12,6 +12,10 @@ from app.models import AdminUser
 
 JWT_ALGORITHM = "HS256"
 
+# "owner" manages the menu and can see the full order history; "treasurer" is limited to
+# today's orders and has no menu access.
+ADMIN_ROLES = ("owner", "treasurer")
+
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -56,3 +60,12 @@ def get_current_admin(
     if user is None:
         raise HTTPException(401, "Admin account no longer exists")
     return user
+
+
+def require_role(*roles: str):
+    def dependency(user: AdminUser = Depends(get_current_admin)) -> AdminUser:
+        if user.role not in roles:
+            raise HTTPException(403, "Not authorized for this action")
+        return user
+
+    return dependency

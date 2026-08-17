@@ -1,4 +1,4 @@
-import type { CustomizationGroup, CustomizationOption, MenuCategory, MenuItem } from "../types";
+import type { CustomizationGroup, CustomizationOption, MenuCategory, MenuItem, Order } from "../types";
 import { clearToken, getToken, UnauthorizedError } from "./auth";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8000";
@@ -57,6 +57,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const fetchAdminCategories = () => request<MenuCategory[]>("/admin/categories");
+
+export const fetchAdminOrders = () => request<Order[]>("/admin/orders");
 
 export const createCategory = (data: CategoryInput) =>
   request<MenuCategory>("/admin/categories", { method: "POST", body: JSON.stringify(data) });

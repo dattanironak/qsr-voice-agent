@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sqlalchemy import select  # noqa: E402
 
-from app.auth import hash_password  # noqa: E402
+from app.auth import ADMIN_ROLES, hash_password  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.models import AdminUser  # noqa: E402
 
@@ -26,6 +26,10 @@ def main() -> None:
     parser.add_argument("username")
     parser.add_argument("--role", default="owner")
     args = parser.parse_args()
+
+    if args.role not in ADMIN_ROLES:
+        print(f"--role must be one of {', '.join(ADMIN_ROLES)}")
+        sys.exit(1)
 
     password = getpass.getpass("Password: ")
     confirm = getpass.getpass("Confirm password: ")

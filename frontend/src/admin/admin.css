@@ -27,6 +27,68 @@
   text-decoration: underline;
 }
 
+.admin-role-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.admin-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.admin-nav-tab {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 500;
+}
+
+.admin-nav-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.admin-order-items {
+  max-width: 420px;
+}
+
+.admin-order-status {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  text-transform: capitalize;
+  border: 1px solid var(--border);
+}
+
+.admin-order-status-paid {
+  background: #16a34a1a;
+  border-color: #16a34a55;
+  color: #16a34a;
+}
+
+.admin-order-status-pending_payment {
+  background: #d977061a;
+  border-color: #d9780655;
+  color: #d97706;
+}
+
+.admin-order-status-payment_failed {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--danger);
+}
+
 .admin-action-error {
   background: var(--accent-bg);
   border: 1px solid var(--accent-border);

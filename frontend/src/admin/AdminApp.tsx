@@ -1,35 +1,26 @@
 import { useEffect, useState } from "react";
-import type { MenuCategory, MenuItem } from "../types";
-import {
-  createCategory,
-  deleteCategory,
-  deleteItem,
-  fetchAdminCategories,
-  updateCategory,
-  updateItem,
-} from "./api";
 import type { AdminSession } from "./auth";
-import { fetchMe, logout, UnauthorizedError } from "./auth";
-import { ItemModal } from "./ItemModal";
+import { fetchMe, logout } from "./auth";
 import { LoginForm } from "./LoginForm";
+import { MenuManager } from "./MenuManager";
+import { OrderHistory } from "./OrderHistory";
 import "./admin.css";
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
+type View = "menu" | "orders";
 
-type ItemModalState = { categoryId: string; item: MenuItem | null };
+const VIEWS_BY_ROLE: Record<string, View[]> = {
+  owner: ["menu", "orders"],
+  treasurer: ["orders"],
+};
+
+const VIEW_LABEL: Record<View, string> = {
+  menu: "Update Menu",
+  orders: "Order History",
+};
 
 export default function AdminApp() {
   const [session, setSession] = useState<AdminSession | null | undefined>(undefined);
-  const [categories, setCategories] = useState<MenuCategory[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [renamingCategoryId, setRenamingCategoryId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  const [itemModal, setItemModal] = useState<ItemModalState | null>(null);
+  const [view, setView] = useState<View>("orders");
 
   useEffect(() => {
     fetchMe()
@@ -37,46 +28,19 @@ export default function AdminApp() {
       .catch(() => setSession(null));
   }, []);
 
-  async function reload(): Promise<MenuCategory[]> {
-    const cats = await fetchAdminCategories();
-    setCategories(cats);
-    return cats;
-  }
-
   useEffect(() => {
     if (!session) return;
-    reload()
-      .then((cats) => {
-        setSelectedCategoryId((prev) => prev ?? cats[0]?.id ?? null);
-      })
-      .catch((err) => {
-        if (err instanceof UnauthorizedError) {
-          setSession(null);
-          return;
-        }
-        setLoadError(errorMessage(err));
-      });
+    const views = VIEWS_BY_ROLE[session.role] ?? ["orders"];
+    setView(views[0]);
   }, [session]);
-
-  async function runAction(fn: () => Promise<unknown>) {
-    setActionError(null);
-    try {
-      await fn();
-      await reload();
-    } catch (err) {
-      if (err instanceof UnauthorizedError) {
-        setSession(null);
-        return;
-      }
-      setActionError(errorMessage(err));
-    }
-  }
 
   function handleLogout() {
     logout();
     setSession(null);
-    setCategories(null);
-    setSelectedCategoryId(null);
+  }
+
+  function handleUnauthorized() {
+    setSession(null);
   }
 
   if (session === undefined) {
@@ -91,50 +55,16 @@ export default function AdminApp() {
     return <LoginForm onLoggedIn={setSession} />;
   }
 
-  function moveSortOrder<T extends { id: string; sort_order: number }>(
-    list: T[],
-    id: string,
-    direction: -1 | 1,
-    persist: (a: T, b: T) => Promise<unknown>,
-  ) {
-    const sorted = [...list].sort((a, b) => a.sort_order - b.sort_order);
-    const idx = sorted.findIndex((x) => x.id === id);
-    const swapIdx = idx + direction;
-    if (idx === -1 || swapIdx < 0 || swapIdx >= sorted.length) return;
-    const a = sorted[idx];
-    const b = sorted[swapIdx];
-    runAction(() => persist(a, b));
-  }
-
-  if (loadError) {
-    return (
-      <div className="admin-shell">
-        <p className="error-text">Couldn't load the admin dashboard: {loadError}</p>
-      </div>
-    );
-  }
-
-  if (!categories) {
-    return (
-      <div className="admin-shell">
-        <p className="muted-text">Loading…</p>
-      </div>
-    );
-  }
-
-  const selectedCategory = categories.find((c) => c.id === selectedCategoryId) ?? null;
-  const liveItem =
-    itemModal?.item != null
-      ? (categories.flatMap((c) => c.items).find((i) => i.id === itemModal.item!.id) ??
-        itemModal.item)
-      : null;
+  const availableViews = VIEWS_BY_ROLE[session.role] ?? ["orders"];
 
   return (
     <div className="admin-shell">
       <header className="admin-header">
-        <h1>Menu admin</h1>
+        <h1>Admin dashboard</h1>
         <div className="admin-session-bar">
-          <span className="muted-text">{session.username}</span>
+          <span className="muted-text">
+            {session.username} <span className="admin-role-badge">{session.role}</span>
+          </span>
           <button type="button" className="admin-btn-secondary" onClick={handleLogout}>
             Log out
           </button>
@@ -144,282 +74,24 @@ export default function AdminApp() {
         </div>
       </header>
 
-      {actionError && <p className="error-text admin-action-error">{actionError}</p>}
-
-      <div className="admin-layout">
-        <aside className="admin-sidebar panel">
-          <h2>Categories</h2>
-          <ul className="admin-category-list">
-            {categories
-              .slice()
-              .sort((a, b) => a.sort_order - b.sort_order)
-              .map((cat) => (
-                <li key={cat.id}>
-                  <div
-                    className={`admin-category-row${cat.id === selectedCategoryId ? " active" : ""}`}
-                  >
-                    <button
-                      type="button"
-                      className="admin-category-select"
-                      onClick={() => setSelectedCategoryId(cat.id)}
-                    >
-                      {renamingCategoryId === cat.id ? (
-                        <input
-                          autoFocus
-                          className="admin-inline-input"
-                          value={renameValue}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onBlur={() => {
-                            const name = renameValue.trim();
-                            setRenamingCategoryId(null);
-                            if (name && name !== cat.name) {
-                              runAction(() => updateCategory(cat.id, { name }));
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                            if (e.key === "Escape") setRenamingCategoryId(null);
-                          }}
-                        />
-                      ) : (
-                        <>
-                          <span>{cat.name}</span>
-                          <span className="muted-text admin-count">{cat.items.length}</span>
-                        </>
-                      )}
-                    </button>
-                    <div className="admin-row-actions">
-                      <button
-                        type="button"
-                        className="admin-icon-btn"
-                        title="Move up"
-                        onClick={() =>
-                          moveSortOrder(categories, cat.id, -1, (a, b) =>
-                            Promise.all([
-                              updateCategory(a.id, { sort_order: b.sort_order }),
-                              updateCategory(b.id, { sort_order: a.sort_order }),
-                            ]),
-                          )
-                        }
-                      >
-                        ▲
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-icon-btn"
-                        title="Move down"
-                        onClick={() =>
-                          moveSortOrder(categories, cat.id, 1, (a, b) =>
-                            Promise.all([
-                              updateCategory(a.id, { sort_order: b.sort_order }),
-                              updateCategory(b.id, { sort_order: a.sort_order }),
-                            ]),
-                          )
-                        }
-                      >
-                        ▼
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-icon-btn"
-                        title="Rename"
-                        onClick={() => {
-                          setRenamingCategoryId(cat.id);
-                          setRenameValue(cat.name);
-                        }}
-                      >
-                        ✎
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-icon-btn admin-icon-danger"
-                        title="Delete category"
-                        onClick={() => {
-                          if (
-                            !confirm(
-                              `Delete category "${cat.name}"? This also deletes its ${cat.items.length} item(s).`,
-                            )
-                          )
-                            return;
-                          runAction(() => deleteCategory(cat.id)).then(() => {
-                            setSelectedCategoryId((prev) => (prev === cat.id ? null : prev));
-                          });
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              ))}
-          </ul>
-
-          <form
-            className="admin-new-category-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const name = newCategoryName.trim();
-              if (!name) return;
-              const maxSort = categories.reduce((m, c) => Math.max(m, c.sort_order), -1);
-              runAction(() => createCategory({ name, sort_order: maxSort + 1 })).then(() =>
-                setNewCategoryName(""),
-              );
-            }}
+      <nav className="admin-nav">
+        {availableViews.map((v) => (
+          <button
+            key={v}
+            type="button"
+            className={`admin-nav-tab${v === view ? " active" : ""}`}
+            onClick={() => setView(v)}
           >
-            <input
-              className="admin-inline-input"
-              placeholder="New category name"
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-            />
-            <button type="submit" className="admin-btn-secondary">
-              + Add
-            </button>
-          </form>
-        </aside>
+            {VIEW_LABEL[v]}
+          </button>
+        ))}
+      </nav>
 
-        <section className="admin-main panel">
-          {!selectedCategory ? (
-            <p className="muted-text">Select or create a category to manage its items.</p>
-          ) : (
-            <>
-              <div className="admin-main-header">
-                <h2>{selectedCategory.name}</h2>
-                <button
-                  type="button"
-                  className="admin-btn-primary"
-                  onClick={() => setItemModal({ categoryId: selectedCategory.id, item: null })}
-                >
-                  + Add item
-                </button>
-              </div>
-
-              {selectedCategory.items.length === 0 ? (
-                <p className="muted-text">No items in this category yet.</p>
-              ) : (
-                <table className="admin-items-table">
-                  <thead>
-                    <tr>
-                      <th />
-                      <th>Name</th>
-                      <th>Price</th>
-                      <th>Available</th>
-                      <th>Customizations</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedCategory.items
-                      .slice()
-                      .sort((a, b) => a.sort_order - b.sort_order)
-                      .map((item) => (
-                        <tr key={item.id}>
-                          <td className="admin-reorder-cell">
-                            <button
-                              type="button"
-                              className="admin-icon-btn"
-                              title="Move up"
-                              onClick={() =>
-                                moveSortOrder(selectedCategory.items, item.id, -1, (a, b) =>
-                                  Promise.all([
-                                    updateItem(a.id, { sort_order: b.sort_order }),
-                                    updateItem(b.id, { sort_order: a.sort_order }),
-                                  ]),
-                                )
-                              }
-                            >
-                              ▲
-                            </button>
-                            <button
-                              type="button"
-                              className="admin-icon-btn"
-                              title="Move down"
-                              onClick={() =>
-                                moveSortOrder(selectedCategory.items, item.id, 1, (a, b) =>
-                                  Promise.all([
-                                    updateItem(a.id, { sort_order: b.sort_order }),
-                                    updateItem(b.id, { sort_order: a.sort_order }),
-                                  ]),
-                                )
-                              }
-                            >
-                              ▼
-                            </button>
-                          </td>
-                          <td>
-                            <div className="admin-item-name-cell">
-                              {item.image_url && <img src={item.image_url} alt="" />}
-                              <div>
-                                <div className="item-name">{item.name}</div>
-                                {item.description && (
-                                  <div className="muted-text admin-item-desc">{item.description}</div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td>₹{item.price.toFixed(2)}</td>
-                          <td>
-                            <label className="admin-toggle">
-                              <input
-                                type="checkbox"
-                                checked={item.is_available}
-                                onChange={(e) =>
-                                  runAction(() =>
-                                    updateItem(item.id, { is_available: e.target.checked }),
-                                  )
-                                }
-                              />
-                            </label>
-                          </td>
-                          <td className="muted-text">
-                            {item.customization_groups.length > 0
-                              ? `${item.customization_groups.length} group(s)`
-                              : "—"}
-                          </td>
-                          <td className="admin-row-actions">
-                            <button
-                              type="button"
-                              className="admin-btn-secondary"
-                              onClick={() =>
-                                setItemModal({ categoryId: selectedCategory.id, item })
-                              }
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="admin-icon-btn admin-icon-danger"
-                              title="Delete item"
-                              onClick={() => {
-                                if (!confirm(`Delete item "${item.name}"?`)) return;
-                                runAction(() => deleteItem(item.id));
-                              }}
-                            >
-                              ✕
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              )}
-            </>
-          )}
-        </section>
-      </div>
-
-      {itemModal && (
-        <ItemModal
-          categories={categories}
-          categoryId={itemModal.categoryId}
-          item={itemModal.item ? (liveItem ?? itemModal.item) : null}
-          onClose={() => setItemModal(null)}
-          onChanged={async () => {
-            await reload();
-          }}
-          onCreated={(created) => setItemModal({ categoryId: itemModal.categoryId, item: created })}
-        />
+      {view === "menu" && availableViews.includes("menu") && (
+        <MenuManager onUnauthorized={handleUnauthorized} />
+      )}
+      {view === "orders" && (
+        <OrderHistory role={session.role} onUnauthorized={handleUnauthorized} />
       )}
     </div>
   );
