@@ -5,9 +5,9 @@ in-memory cart via function tools, grounded in GET /menu from the backend. Every
 publishes a `cart_update` data message so the web frontend's cart panel stays in lock-step with
 the spoken conversation. Once the customer confirms, complete_order creates the order on the
 backend and publishes an `order_update` data message; the web frontend takes it from there to
-show a UPI QR (PayU hosted checkout, restricted to UPI). This process polls the backend for the
-payment outcome (the backend learns it from PayU's callback) and speaks the result before ending
-the call.
+show a UPI QR (PayU hosted checkout, restricted to UPI) and carries the order through to
+paid/failed on its own. This process ends the call right after the order-confirmation reply
+instead of waiting around for payment to resolve.
 
 STT/LLM/TTS/VAD all run through LiveKit Cloud's hosted inference gateway
 (`livekit.agents.inference`), authenticated with the same LIVEKIT_URL/LIVEKIT_API_KEY/
@@ -123,20 +123,15 @@ def build_system_prompt(menu: dict) -> str:
         "\"I'm done\"), first call get_cart_summary and read the order back to them (items and "
         "total) so they can confirm it's correct — don't call complete_order until they confirm.",
         "- Once they confirm, call complete_order. This creates their order and puts a UPI QR "
-        "code on their screen. In the same reply: tell them their total and ask them to scan the "
-        "QR code on screen with any UPI app to pay — keep it short and warm. Do NOT say goodbye "
-        "yet and do NOT treat this as the end of the call — you'll speak again automatically once "
-        "payment succeeds or fails, so just stop talking after that reply and wait.",
+        "code on their screen. In the same reply: tell them their total, ask them to scan the QR "
+        "code on screen with any UPI app to pay, mention their pickup code and receipt will show "
+        "on screen once payment goes through (or that staff can take payment at the counter if it "
+        "doesn't), and say goodbye — this reply is the last thing you say, the call ends right "
+        "after it, so don't say you'll wait or check back.",
         "- Don't call complete_order for an empty cart — if they try to check out with nothing in "
         "the cart, ask what they'd like to order instead. If complete_order returns "
         "{\"status\": \"order_already_placed\"}, don't create another order — just let them know "
         "their order is already placed and waiting on payment.",
-        "- While waiting for payment, the customer may ask things like \"is it done?\" or \"did "
-        "it go through?\" — use check_payment_status to answer rather than guessing. Don't call "
-        "complete_order again to check.",
-        "- Once payment succeeds or fails you'll be prompted to deliver a closing message "
-        "automatically — that message is the last thing you say, the call ends right after, so "
-        "don't keep talking past it.",
         "",
         "MENU:",
     ]
@@ -439,15 +434,16 @@ class MenuAgent(Agent):
     @function_tool()
     async def complete_order(self, context: RunContext) -> dict:
         """Call this once the customer has confirmed their order is correct and they're ready to
-        pay. Creates the order on the backend and puts a UPI QR code on their screen for payment
-        — the closing message you give right after this should tell them their total and ask
-        them to scan it, then stop talking and wait (don't say goodbye yet, the call stays open).
+        pay. Creates the order on the backend and puts a UPI QR code on their screen for payment.
+        The message you give right after this call is the LAST thing you say — tell them their
+        total, ask them to scan the QR code on screen to pay, mention their pickup code and
+        receipt will appear on screen once payment goes through (or that staff can take payment
+        at the counter if it doesn't), and say goodbye. The call ends automatically right after
+        you finish speaking, so don't say you'll wait or check back.
         Returns {"error": "cart_empty"} if the cart has nothing in it — don't call this for an
         empty cart. Returns {"status": "order_already_placed", ...} if an order was already
         created this call — don't create a second one, just relay the existing status. On success
-        returns {"order_id", "pickup_token", "total", "status": "pending_payment"}; you'll be
-        prompted automatically to speak again once payment succeeds, fails, or times out — that
-        prompt's message is the real end of the call, not this one."""
+        returns {"order_id", "pickup_token", "total", "status": "pending_payment"}."""
         if self._order_id is not None:
             return {
                 "status": "order_already_placed",
@@ -496,7 +492,7 @@ class MenuAgent(Agent):
                 "status": order["status"],
             },
         )
-        asyncio.create_task(self._watch_payment(context.speech_handle))
+        asyncio.create_task(self._end_call_after_speech(context.speech_handle))
         return {
             "order_id": order["id"],
             "pickup_token": order["pickup_token"],
@@ -504,90 +500,13 @@ class MenuAgent(Agent):
             "status": order["status"],
         }
 
-    @function_tool()
-    async def check_payment_status(self, context: RunContext) -> dict:
-        """Check the current status of the order created by complete_order (pending_payment,
-        paid, or payment_failed). Use this if the customer asks whether their payment has gone
-        through instead of guessing or calling complete_order again. Returns
-        {"error": "no_order"} if complete_order hasn't been called yet this call."""
-        if self._order_id is None:
-            return {"error": "no_order"}
-        try:
-            resp = await self._client.get(f"/orders/{self._order_id}")
-            resp.raise_for_status()
-            order = resp.json()
-        except Exception:
-            logger.exception("failed to fetch order status")
-            return {"error": "status_check_failed"}
-        return {"status": order["status"], "total": order["total"]}
-
-    async def _watch_payment(self, initial_speech_handle) -> None:
-        """Runs in the background after complete_order, polling the backend (which PayU's
-        webhook/redirect updates as payment resolves) until the order reaches a terminal state,
-        then speaks the outcome and ends the call. Polling is the simplest way to bridge this
-        Python process and the backend's PayU callback — they're separate processes with no
-        other channel between them."""
-        try:
-            await initial_speech_handle.wait_for_playout()
-        except Exception:
-            logger.exception("error waiting for order-confirmation speech to finish")
-
-        poll_interval = 2.0
-        timeout_seconds = 180.0
-        elapsed = 0.0
-        final_order: dict | None = None
-
-        while elapsed < timeout_seconds:
-            try:
-                resp = await self._client.get(f"/orders/{self._order_id}")
-                resp.raise_for_status()
-                order = resp.json()
-            except Exception:
-                logger.exception("error polling order status")
-                order = None
-
-            if order is not None and order["status"] in ("paid", "payment_failed"):
-                final_order = order
-                break
-
-            await asyncio.sleep(poll_interval)
-            elapsed += poll_interval
-
-        if final_order is not None:
-            await self._publish_order_update(
-                "order_status",
-                {
-                    "id": final_order["id"],
-                    "pickup_token": final_order["pickup_token"],
-                    "total": final_order["total"],
-                    "status": final_order["status"],
-                },
-            )
-
-        if final_order is not None and final_order["status"] == "paid":
-            instructions = (
-                f"Tell the customer their payment of ₹{final_order['total']} went through. "
-                f"Clearly read out their pickup code '{final_order['pickup_token']}' letter by "
-                "letter and tell them to listen for it at the counter. Keep it short and warm, "
-                "then say goodbye — this is the last thing you say."
-            )
-        elif final_order is not None:
-            instructions = (
-                "Tell the customer their payment didn't go through. Apologize briefly and let "
-                "them know they can pay at the counter with the staff instead. Keep it short and "
-                "warm, then say goodbye — this is the last thing you say."
-            )
-        else:
-            instructions = (
-                "Tell the customer we didn't get payment confirmation in time. Apologize briefly "
-                "and let them know they can pay at the counter with the staff instead. Keep it "
-                "short and warm, then say goodbye — this is the last thing you say."
-            )
-
-        speech_handle = self.session.generate_reply(instructions=instructions)
-        await self._end_call_after_speech(speech_handle)
-
     async def _end_call_after_speech(self, speech_handle) -> None:
+        """Runs in the background after complete_order's confirmation reply. Payment resolution
+        (paid/failed) and the pickup-code readout now happen entirely on screen — the checkout
+        panel polls the backend directly (see backend/app/routers/payments.py's surl/furl
+        callback) — so the room is torn down right after the confirmation line finishes instead
+        of staying connected while the agent polls for payment to resolve, which otherwise kept
+        billing for up to 180s per order for no UX benefit."""
         try:
             await speech_handle.wait_for_playout()
         except Exception:
@@ -646,6 +565,29 @@ class MenuAgent(Agent):
 
 async def entrypoint(ctx: JobContext):
     await ctx.connect()
+
+    # complete_order tears the room down itself once an order is placed (see
+    # _end_call_after_speech), but a customer who refreshes/closes the tab mid-conversation
+    # never triggers that path — they just vanish, leaving this job alone in the room, still
+    # running the STT/LLM/TTS pipeline and waiting on speech that will never come. LiveKit's own
+    # empty-room timeout can't be relied on here since the agent itself remains a participant, so
+    # close the room ourselves as soon as the customer is the only one who left.
+    def _on_participant_disconnected(_participant: rtc.RemoteParticipant) -> None:
+        if ctx.room.remote_participants:
+            return
+        logger.info("customer left room %s with no order placed; tearing it down", ctx.room.name)
+
+        async def _close_abandoned_room() -> None:
+            try:
+                await ctx.delete_room()
+            except Exception:
+                # Already being torn down by the complete_order path racing with this, or the
+                # room is simply gone by the time this runs — either way, nothing left to do.
+                logger.exception("failed to delete abandoned room %s", ctx.room.name)
+
+        asyncio.create_task(_close_abandoned_room())
+
+    ctx.room.on("participant_disconnected", _on_participant_disconnected)
 
     menu = await fetch_menu()
     logger.info("Fetched menu: %d categories", len(menu.get("categories", [])))

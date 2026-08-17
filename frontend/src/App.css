@@ -451,16 +451,6 @@
   margin-bottom: 12px;
 }
 
-.checkout-pay-btn {
-  border: none;
-  border-radius: 8px;
-  padding: 12px 20px;
-  font-weight: 600;
-  font-size: 15px;
-  color: white;
-  background: var(--accent);
-  margin: 12px 0;
-}
 
 .checkout-waiting {
   font-style: italic;
@@ -531,11 +521,26 @@
   background: #e0a30c;
 }
 
+.voice-controls-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .mic-toggle-btn {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 14px;
   background: var(--bg);
   color: var(--text-h);
+  font-weight: 600;
+}
+
+.end-conversation-btn {
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  padding: 8px 14px;
+  background: var(--bg);
+  color: var(--danger);
   font-weight: 600;
 }

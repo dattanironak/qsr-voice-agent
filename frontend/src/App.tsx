@@ -47,9 +47,12 @@ function App() {
       onConnected={() => setConnecting(false)}
       onDisconnected={() => {
         setConnecting(false);
-        // The agent closes the room itself once checkout is done (complete_order ->
-        // delete_room), so a disconnect while we had an active session means the order
-        // finished, not an error — reset so "Start voice ordering" is ready for a new order.
+        // The agent closes the room itself right after the order-confirmation reply
+        // (complete_order -> delete_room, before payment resolves — see agent.py's
+        // _end_call_after_speech), so a disconnect while we had an active session means the
+        // voice part of the flow finished, not an error — reset so "Start voice ordering" is
+        // ready for a new order. Payment itself is still pending at this point; CheckoutPanel's
+        // own polling (independent of the room) carries the order through to paid/failed.
         setSession((prevSession) => {
           if (prevSession !== null) {
             setOrderJustEnded(true);

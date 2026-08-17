@@ -18,24 +18,93 @@ interface CheckoutPanelProps {
   onStatusChange: (status: string) => void;
 }
 
+interface BoltResponse {
+  response?: { txnStatus?: string };
+}
+
+declare global {
+  interface Window {
+    bolt?: {
+      launch: (
+        data: Record<string, string>,
+        handlers: {
+          responseHandler: (bolt: BoltResponse) => void;
+          catchException: (bolt: BoltResponse) => void;
+        }
+      ) => void;
+    };
+  }
+}
+
+// PayU's hosted `/_payment` page refuses to be framed from origins outside its own partner
+// allowlist (X-Frame-Options), so an inline iframe of the classic checkout page is blocked by the
+// browser. Bolt is PayU's own on-page overlay SDK instead — it doesn't hit that restriction
+// because PayU controls the overlay's rendering itself, not our iframe.
+const BOLT_SCRIPT_PROD = "https://jssdk.payu.in/bolt/bolt.min.js";
+const BOLT_SCRIPT_UAT = "https://jssdk-uat.payu.in/bolt/bolt.min.js";
+
+const boltScriptPromises = new Map<string, Promise<void>>();
+
+function loadBoltScript(src: string): Promise<void> {
+  let promise = boltScriptPromises.get(src);
+  if (!promise) {
+    promise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Failed to load the PayU payment SDK"));
+      document.head.appendChild(script);
+    });
+    boltScriptPromises.set(src, promise);
+  }
+  return promise;
+}
+
 // Shown once the voice agent has confirmed the order and created it on the backend
-// (order_update/order_created). Payment is UPI-only: PayU's hosted checkout, restricted to the
-// UPI payment method, is opened in a new tab so the voice call in this tab keeps running while
-// the customer scans the QR with any UPI app. This panel polls order status itself (independent
-// of the agent's own polling) purely to update the on-screen status live.
+// (order_update/order_created). Payment is UPI-only: PayU's Bolt SDK renders the hosted UPI QR
+// as an on-page overlay the moment checkout fields are ready — no button click, no new tab, no
+// navigating away — so the voice call widget stays visible and running underneath. The actual
+// "paid" transition is still driven server-side by PayU's surl/furl callback (routers/payments.py)
+// since the backend requests `mode=dropout`; this panel's own polling below just mirrors that
+// status on screen.
 export function CheckoutPanel({ order, onStatusChange }: CheckoutPanelProps) {
   const [checkout, setCheckout] = useState<PayuCheckout | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const formRef = useRef<HTMLFormElement>(null);
+  const launchedTxnRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (order.status !== "pending_payment") return;
     setCheckout(null);
     setCheckoutError(null);
+    launchedTxnRef.current = null;
     createPayuCheckout(order.id)
       .then(setCheckout)
       .catch((err) => setCheckoutError(errorMessage(err)));
   }, [order.id, order.status]);
+
+  useEffect(() => {
+    if (!checkout || launchedTxnRef.current === checkout.fields.txnid) return;
+    const scriptSrc = checkout.action_url.includes("test.payu.in") ? BOLT_SCRIPT_UAT : BOLT_SCRIPT_PROD;
+    let cancelled = false;
+    loadBoltScript(scriptSrc)
+      .then(() => {
+        if (cancelled || !window.bolt) return;
+        launchedTxnRef.current = checkout.fields.txnid;
+        window.bolt.launch(checkout.fields, {
+          responseHandler: () => {
+            // No client-side action needed — PayU's mode=dropout callback to surl/furl already
+            // updates the order server-side, and this panel's polling below picks it up.
+          },
+          catchException: () =>
+            setCheckoutError("Couldn't open the payment window. Please try again."),
+        });
+      })
+      .catch((err) => setCheckoutError(errorMessage(err)));
+    return () => {
+      cancelled = true;
+    };
+  }, [checkout]);
 
   useEffect(() => {
     if (order.status !== "pending_payment") return;
@@ -57,21 +126,8 @@ export function CheckoutPanel({ order, onStatusChange }: CheckoutPanelProps) {
 
       {order.status === "pending_payment" && (
         <>
-          <p className="muted-text">
-            Pay with any UPI app — tap below to open PayU's payment page in a new tab and scan
-            the QR code there.
-          </p>
+          <p className="muted-text">Pay with any UPI app — scan the QR code that opens below.</p>
           {checkoutError && <p className="error-text">{checkoutError}</p>}
-          {checkout && (
-            <form ref={formRef} action={checkout.action_url} method="POST" target="_blank">
-              {Object.entries(checkout.fields).map(([name, value]) => (
-                <input key={name} type="hidden" name={name} value={value} />
-              ))}
-              <button type="submit" className="checkout-pay-btn">
-                Pay ₹{order.total.toFixed(2)} via UPI
-              </button>
-            </form>
-          )}
           <p className="muted-text checkout-waiting">Waiting for payment confirmation…</p>
         </>
       )}

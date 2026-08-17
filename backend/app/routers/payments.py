@@ -2,13 +2,15 @@
 
 Flow:
 1. Frontend calls `POST /orders/{order_id}/payu/qr` to get a signed set of form fields.
-2. Frontend auto-submits those fields as a POST to PayU's hosted `/_payment` page (in a new tab,
-   so the customer's UPI app of choice can scan the QR PayU renders there) — `enforce_paymethod`
-   restricts that page to showing only the UPI/QR payment option.
-3. PayU redirects the customer's browser back to our `surl` (success) or `furl` (failure) with a
-   signed form POST. We verify the reverse hash (proof it actually came from PayU, not a customer
-   editing form fields), update the Order/Payment, and redirect the browser on to a frontend
-   receipt page.
+2. Frontend hands those fields to PayU's Bolt SDK (`bolt.launch`), which renders the UPI QR as an
+   on-page overlay instead of navigating to PayU's hosted `/_payment` page — `enforce_paymethod`
+   restricts that overlay to showing only the UPI/QR payment option. `mode=dropout` tells PayU to
+   still deliver the transaction result to our `surl`/`furl` below rather than only to the
+   frontend's in-browser response handler, so the existing server-side confirmation flow below is
+   unchanged by the switch to Bolt.
+3. PayU posts the signed transaction result to our `surl` (success) or `furl` (failure). We verify
+   the reverse hash (proof it actually came from PayU, not a customer editing form fields), update
+   the Order/Payment, and redirect on to a frontend receipt page.
 
 Note: `enforce_paymethod=upi` is PayU's documented "restrict payment options" hosted-checkout
 parameter — confirm it's enabled the same way on your live PayU merchant dashboard before
@@ -92,6 +94,7 @@ def create_payu_checkout(
         "furl": f"{settings.backend_public_base_url}/payments/payu/failure",
         "hash": request_hash,
         "enforce_paymethod": "upi",
+        "mode": "dropout",
     }
     return PayuCheckoutOut(action_url=settings.payu_payment_url, fields=fields)
 

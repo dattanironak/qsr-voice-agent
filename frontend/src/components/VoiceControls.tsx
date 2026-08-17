@@ -13,7 +13,13 @@ const STATE_LABEL: Record<string, string> = {
   failed: "Connection failed",
 };
 
-export function VoiceControls({ connected }: { connected: boolean }) {
+interface VoiceControlsProps {
+  connected: boolean;
+  canEndConversation: boolean;
+  onEndConversation: () => void;
+}
+
+export function VoiceControls({ connected, canEndConversation, onEndConversation }: VoiceControlsProps) {
   const { state } = useVoiceAssistant();
   const { toggle, enabled, pending } = useTrackToggle({ source: Track.Source.Microphone });
 
@@ -27,14 +33,21 @@ export function VoiceControls({ connected }: { connected: boolean }) {
         <span className="agent-state-dot" />
         {STATE_LABEL[state] ?? state}
       </div>
-      <button
-        type="button"
-        className="mic-toggle-btn"
-        disabled={pending}
-        onClick={() => toggle()}
-      >
-        {enabled ? "Mute mic" : "Unmute mic"}
-      </button>
+      <div className="voice-controls-actions">
+        <button
+          type="button"
+          className="mic-toggle-btn"
+          disabled={pending}
+          onClick={() => toggle()}
+        >
+          {enabled ? "Mute mic" : "Unmute mic"}
+        </button>
+        {canEndConversation && (
+          <button type="button" className="end-conversation-btn" onClick={onEndConversation}>
+            End conversation
+          </button>
+        )}
+      </div>
     </div>
   );
 }

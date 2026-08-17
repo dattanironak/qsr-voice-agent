@@ -74,10 +74,10 @@ export function OrderingExperience({
   }, []);
   useDataChannel("cart_update", onCartMessage);
 
-  // The agent publishes order_update once complete_order creates the order (order_created) and
-  // again once payment resolves (order_status) — this is what switches the UI from menu/cart
-  // browsing into the checkout screen. CheckoutPanel also polls the backend directly for the
-  // same status, since the LiveKit data channel and the agent's own polling are best-effort.
+  // The agent publishes order_update once (order_created) when complete_order creates the order
+  // — this is what switches the UI from menu/cart browsing into the checkout screen. The agent's
+  // room closes right after that, before payment resolves, so CheckoutPanel drives every status
+  // change from there on by polling the backend directly (see its onStatusChange prop).
   const onOrderMessage = useCallback((msg: ReceivedDataMessage<"order_update">) => {
     try {
       const decoded = new TextDecoder().decode(msg.payload);
@@ -144,6 +144,19 @@ export function OrderingExperience({
     await callCartRpc("cart.remove", { line_id: lineId });
   }
 
+  // Disconnecting is enough to close the room end-to-end: the agent notices it's alone
+  // (entrypoint()'s participant_disconnected handler in agent.py) and deletes the room itself —
+  // the same teardown path a page refresh already goes through, which is what discards the
+  // agent's in-memory cart. Clearing cart/order here (rather than waiting for the next session,
+  // as the useEffect above does for a completed order) is what makes it read as an immediate
+  // reset instead of the last cart hanging around until "Start voice ordering" is pressed again.
+  function handleEndConversation() {
+    setCart(EMPTY_CART);
+    setCartError(null);
+    setOrder(null);
+    void room.disconnect();
+  }
+
   return (
     <div className="app-layout">
       <Header
@@ -153,7 +166,7 @@ export function OrderingExperience({
         hasSession={hasSession}
         onConnect={onConnect}
       />
-      {orderJustEnded && !hasSession && (
+      {orderJustEnded && !hasSession && order && order.status !== "pending_payment" && (
         <p className="order-ended-banner">
           {order?.status === "paid"
             ? `Thanks! Payment received — your pickup code is ${order.pickup_token}. Listen for it at the counter.`
@@ -175,7 +188,11 @@ export function OrderingExperience({
           />
         )}
         <aside className="sidebar">
-          <VoiceControls connected={connected} />
+          <VoiceControls
+            connected={connected}
+            canEndConversation={!order}
+            onEndConversation={handleEndConversation}
+          />
           <TranscriptPanel connected={connected} />
           <CartPanel
             cart={cart}
